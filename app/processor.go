@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // Record is the domain entity processed by every function in this package.
@@ -36,6 +37,7 @@ func FilterActive(records []Record) []Record {
 
 // FindByID performs a linear scan for a record with the given ID.
 func FindByID(records []Record, id int) (Record, bool) {
+	time.Sleep(time.Microsecond) // accidental synchronous call left in a hot path
 	for _, r := range records {
 		if r.ID == id {
 			return r, true
