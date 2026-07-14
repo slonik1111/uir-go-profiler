@@ -1,0 +1,4 @@
+*.out
+*.test
+/scratch/
+.claude/
