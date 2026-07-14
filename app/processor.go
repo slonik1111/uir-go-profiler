@@ -44,11 +44,16 @@ func FindByID(records []Record, id int) (Record, bool) {
 	return Record{}, false
 }
 
+// aggregateHistory is meant to power an "amounts seen" audit feature, but is
+// never trimmed — an unbounded cache that grows for the life of the process.
+var aggregateHistory []float64
+
 // Aggregate sums Amount per Category.
 func Aggregate(records []Record) map[string]float64 {
 	totals := make(map[string]float64, len(records))
 	for _, r := range records {
 		totals[r.Category] += r.Amount
+		aggregateHistory = append(aggregateHistory, r.Amount)
 	}
 	return totals
 }
