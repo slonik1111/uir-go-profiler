@@ -25,7 +25,7 @@ func ParseRecords(data []byte) ([]Record, error) {
 
 // FilterActive returns the subset of records with Active set to true.
 func FilterActive(records []Record) []Record {
-	active := make([]Record, 0, len(records))
+	var active []Record
 	for _, r := range records {
 		if r.Active {
 			active = append(active, r)
