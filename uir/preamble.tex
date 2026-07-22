@@ -1,0 +1,160 @@
+% Преамбула ПЗ к УИР, оформление по "Методическим указаниям для студентов
+% к оформлению пояснительной записки к УИР/НИР" (кафедра 22 "Кибернетика", НИЯУ МИФИ).
+%
+% Компилировать XeLaTeX'ом (нужен fontspec для кириллического Times-подобного
+% шрифта): xelatex main.tex (дважды, чтобы содержание/ссылки посчитались).
+%
+% Требования из методички, реализованные ниже:
+%  - Times New Roman 12пт, интервал 1.5, выравнивание по ширине
+%  - поля: слева 30мм, справа 10мм, сверху 20мм, снизу 20мм
+%  - отступ первой строки абзаца 1.25см, интервалы до/после абзаца = 0
+%  - заголовки: раздел 1-го уровня 14пт полужирный, 2-го уровня 13пт
+%    полужирный, 3-го уровня и ниже 12пт полужирный
+%  - номера страниц внизу по центру; титульный лист не нумеруется, реферат
+%    считается страницей 2
+%  - подписи таблиц НАД таблицей (по ширине, без отступа), подписи рисунков
+%    ПОД рисунком (по центру)
+
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setmainlanguage{russian}
+\setotherlanguage{english}
+
+% PT Serif — свободный кириллический шрифт, метрически близкий к Times New
+% Roman, входит в стандартный TeX Live (пакет paratype). Если на вашей
+% машине установлен настоящий Times New Roman — замените имя шрифта ниже.
+\setmainfont{PT Serif}[
+  BoldFont = PT Serif Bold,
+  ItalicFont = PT Serif Italic,
+  BoldItalicFont = PT Serif Bold Italic
+]
+\setmonofont{PT Mono}[Scale=0.92]
+
+\usepackage[left=30mm,right=10mm,top=20mm,bottom=20mm]{geometry}
+
+\usepackage{setspace}
+\onehalfspacing
+
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0pt}
+
+\usepackage{titlesec}
+% Раздел 1-го уровня — 14пт полужирный, с новой страницы
+\titleformat{\section}{\fontsize{14}{16.8}\selectfont\bfseries}{Раздел \thesection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{0pt}{12pt}
+% Подраздел 2-го уровня — 13пт полужирный
+\titleformat{\subsection}{\fontsize{13}{15.6}\selectfont\bfseries}{\thesubsection}{0.5em}{}
+\titlespacing*{\subsection}{0pt}{10pt}{6pt}
+% Подраздел 3-го уровня и ниже — 12пт полужирный
+\titleformat{\subsubsection}{\fontsize{12}{14.4}\selectfont\bfseries}{\thesubsubsection}{0.5em}{}
+\titlespacing*{\subsubsection}{0pt}{8pt}{4pt}
+
+\newcommand{\newrazdel}{\clearpage}
+
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{caption}
+% Подписи таблиц — над таблицей, по ширине, без абзацного отступа, "Таблица N – ..."
+% Подписи рисунков — под рисунком, по центру, "Рис. N – ..."
+\captionsetup[table]{position=top,labelsep=endash,justification=raggedright,singlelinecheck=false,font={normalsize},skip=4pt}
+\captionsetup[figure]{position=bottom,labelsep=endash,justification=centering,font={normalsize},skip=4pt}
+\renewcommand{\thetable}{\thesection.\arabic{table}}
+\renewcommand{\thefigure}{\thesection.\arabic{figure}}
+\counterwithin{table}{section}
+\counterwithin{figure}{section}
+
+\usepackage{listings}
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codecomment}{RGB}{95,110,95}
+\definecolor{codekeyword}{RGB}{40,40,120}
+\lstdefinelanguage{Go}{
+  morekeywords={package,import,func,return,if,else,for,range,switch,case,default,
+    struct,interface,map,chan,go,defer,select,break,continue,fallthrough,
+    var,const,type,nil,true,false,make,new,append,len,cap,panic,recover},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]",
+  morestring=[b]`,
+}
+\lstset{
+  language=Go,
+  basicstyle=\ttfamily\fontsize{9.5}{11}\selectfont,
+  keywordstyle=\color{codekeyword}\bfseries,
+  commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{teal},
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{gray!50},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  breaklines=true,
+  breakatwhitespace=false,
+  showstringspaces=false,
+  tabsize=2,
+  captionpos=b,
+  xleftmargin=15pt,
+}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\floatname{algorithm}{Алгоритм}
+\renewcommand{\listalgorithmname}{Список алгоритмов}
+% Формулы по центру, номер в скобках справа — стандартное поведение equation
+\numberwithin{equation}{section}
+
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue,unicode]{hyperref}
+\urlstyle{same}
+
+\usepackage{enumitem}
+\setlist{topsep=2pt,itemsep=2pt,parsep=0pt}
+
+\usepackage{pdfpages}
+
+\clubpenalty=10000
+\widowpenalty=10000
+
+\pagestyle{plain}
+\sloppy
+
+% Общая "шапка" (используется на титульном листе и на листе задания),
+% воспроизводит стиль thesis-template-3-pz: три центрированные строки
+% реквизитов, горизонтальная линия, логотип МИФИ слева от названия
+% института/кафедры.
+% Размеры шрифтов сняты непосредственно с PDF примера thesis-template-3-pz
+% (лист задания): 8пт/8пт/12пт-полужирный в шапке, 14.3пт-полужирный для
+% названия института/кафедры.
+\newcommand{\pzletterhead}{%
+\begin{center}
+\fontsize{8}{9.5}\selectfont
+МИНИСТЕРСТВО НАУКИ И ВЫСШЕГО ОБРАЗОВАНИЯ РОССИЙСКОЙ ФЕДЕРАЦИИ\\
+ФЕДЕРАЛЬНОЕ ГОСУДАРСТВЕННОЕ АВТОНОМНОЕ ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ВЫСШЕГО ОБРАЗОВАНИЯ\\
+{\fontsize{12}{14}\selectfont\bfseries Национальный исследовательский ядерный университет «МИФИ»}
+\end{center}
+\vspace{-0.15cm}
+\noindent\rule{\linewidth}{1pt}
+\vspace{0.5cm}
+
+\noindent\begin{minipage}[c]{2.4cm}
+\includegraphics[width=2.1cm]{img/mephi-logo.png}
+\end{minipage}%
+\begin{minipage}[c]{\dimexpr\linewidth-2.4cm\relax}
+\centering
+\fontsize{14.3}{17}\selectfont\bfseries
+Институт интеллектуальных кибернетических систем\\
+Кафедра №22 «Кибернетика»
+\end{minipage}
+}
+
+\begin{document}

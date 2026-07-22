@@ -1,0 +1,219 @@
+\section{Формализация критерия обнаружения регрессий и модель процесса профилирования в CI/CD}
+\label{sec:razdel2}
+
+\subsection{Модель процесса профилирования в CI/CD-пайплайне}
+\label{sec:2.1}
+
+Процесс обнаружения регрессии производительности рассматривается как
+конечный автомат, привязанный к событию открытия или обновления pull
+request (рис.~\ref{fig:2.1}). Ключевое проектное решение, вытекающее из
+вывода раздела~\ref{sec:1.2}, — после запуска бенчмарков процесс
+\emph{разветвляется} на два параллельных, статистически независимых шага:
+сравнение агрегатов через \texttt{benchstat} (решающий шаг) и снятие
+pprof-профилей с их сравнением через \texttt{diff\_base} (диагностический
+шаг, не влияющий на исход сборки, но прикладываемый к отчёту).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=8mm and 12mm,
+  box/.style={draw, rounded corners, minimum height=8mm, minimum width=28mm, align=center, font=\small},
+  decision/.style={draw, diamond, aspect=2.2, minimum width=30mm, align=center, font=\small},
+  arr/.style={-{Latex[length=2mm]}}
+]
+\node[box] (trigger) {PR открыт /\\обновлён};
+\node[box, below=of trigger] (checkout) {checkout + setup Go\\+ install benchstat};
+\node[box, below=of checkout] (bench) {go test -bench\\-count=N (эталон уже есть)};
+\node[decision, below=10mm of bench] (split) {два\\параллельных\\шага};
+\node[box, below left=10mm and -6mm of split] (compare) {benchstat vs.\\baseline.txt};
+\node[box, below right=10mm and -6mm of split] (profile) {pprof-профиль vs.\\baseline-*.pprof};
+\node[decision, below=16mm of compare] (dec) {$\Delta_m > T$ \&\&\\$p_m < \alpha$?};
+\node[box, below=8mm of dec, fill=red!12] (fail) {FAIL: отчёт в PR,\\merge заблокирован};
+\node[box, right=14mm of fail, fill=green!12] (ok) {OK: merge разрешён};
+\node[box, below=8mm of profile] (artifact) {top-N функций в\\step summary + артефакт};
+
+\draw[arr] (trigger) -- (checkout);
+\draw[arr] (checkout) -- (bench);
+\draw[arr] (bench) -- (split);
+\draw[arr] (split) -- (compare);
+\draw[arr] (split) -- (profile);
+\draw[arr] (compare) -- (dec);
+\draw[arr] (dec) -- node[left,font=\scriptsize]{да} (fail);
+\draw[arr] (dec) -| node[above,pos=0.25,font=\scriptsize]{нет} (ok);
+\draw[arr] (profile) -- (artifact);
+\end{tikzpicture}
+\caption{Модель процесса профилирования и обнаружения регрессии в CI/CD-пайплайне}
+\label{fig:2.1}
+\end{figure}
+
+Существенное свойство модели: диагностический шаг (правая ветвь,
+pprof-профиль) выполняется \texttt{always()} в терминах GitHub Actions —
+то есть независимо от исхода решающего шага, включая случай его падения. Это
+позволяет получить профиль-объяснение причины регрессии в том же прогоне
+CI, в котором она была обнаружена, не дожидаясь отдельного ручного
+профилирования разработчиком постфактум (что было отмечено как ограничение
+подхода "ручное профилирование" в таблице~\ref{tab:1.1}).
+
+\subsection{Формализация статистического критерия обнаружения регрессии}
+\label{sec:2.2}
+
+Пусть на эталонном коммите (main) и на кандидатном коммите (PR) для каждого
+бенчмарка $b \in B$ и каждой метрики $m \in \{\text{ns/op}, \text{B/op},
+\text{allocs/op}\}$ независимым запуском \texttt{go test -bench -count=$n$}
+получены выборки
+$$
+X_{b,m} = \{x_1, \dots, x_n\}, \qquad Y_{b,m} = \{y_1, \dots, y_k\},
+$$
+где $X_{b,m}$ — измерения на эталоне, $Y_{b,m}$ — на кандидате
+($n$ и $k$ обычно совпадают и равны параметру \texttt{-count}, но формально
+не обязаны). Все три метрики в данной работе относятся к классу
+"меньше — лучше" (lower-is-better), поэтому регрессией считается
+\emph{рост} значения.
+
+\texttt{benchstat} оценивает центральную тенденцию каждой выборки медианой
+$\hat\mu(X_{b,m})$, $\hat\mu(X_{b,m})$ и вычисляет относительное изменение
+
+\begin{equation}
+\Delta_{b,m} = \frac{\hat\mu(Y_{b,m}) - \hat\mu(X_{b,m})}{\hat\mu(X_{b,m})} \times 100\%.
+\label{eq:delta}
+\end{equation}
+
+Статистическая значимость отличия оценивается $p$-значением
+$p_{b,m}$ критерия Манна --- Уитни (используется \texttt{benchstat} по
+умолчанию как непараметрический критерий, устойчивый к отклонению
+распределения задержек от нормального — задержки почти всегда
+правосторонне скошены из-за редких выбросов планирования ОС) либо критерия
+Уэлча~\cite{welch1947} для приблизительно нормальных выборок. Регрессия по
+конкретной метрике конкретного бенчмарка объявляется тогда и только тогда,
+когда одновременно выполнены статистическая и практическая значимость
+отклонения:
+
+\begin{equation}
+\mathrm{regression}(b, m) \;\Longleftrightarrow\; \bigl(\Delta_{b,m} > T\bigr) \;\wedge\; \bigl(p_{b,m} < \alpha\bigr),
+\label{eq:criterion}
+\end{equation}
+
+где $T$ — порог относительного отклонения в процентах (параметр
+\texttt{THRESHOLD} в реализации, раздел~\ref{sec:razdel4}), $\alpha$ —
+уровень значимости (параметр \texttt{ALPHA}). Условие $\Delta_{b,m} > T$
+без учёта $p_{b,m}$ ловило бы шумовые колебания как ложные регрессии при
+малом $T$; условие $p_{b,m} < \alpha$ без учёта $\Delta_{b,m}$ ловило бы
+статистически значимые, но практически пренебрежимо малые отклонения
+(например, 0,3\% при большой выборке) — сочетание обоих условий необходимо
+именно для того, чтобы отделять шум от практически значимых регрессий; эта
+гипотеза проверяется экспериментально в разделе~\ref{sec:5.2} перебором
+сетки значений $T$ и $\alpha$.
+
+Итоговое решение по всему прогону — дизъюнкция по всем бенчмаркам и
+метрикам:
+
+\begin{equation}
+\mathrm{FAIL} \;\Longleftrightarrow\; \exists\, b \in B,\, m \in M : \mathrm{regression}(b, m).
+\label{eq:fail}
+\end{equation}
+
+\textbf{Диагностический критерий на уровне профиля.} В отличие от
+критерия~\eqref{eq:criterion}, сравнение pprof-профилей не участвует в
+принятии решения FAIL/OK, а используется описательно: для CPU-профиля
+каждая функция $f$ характеризуется числом сэмплов \texttt{flat} (время,
+проведённое непосредственно в теле функции) и \texttt{cum} (суммарно с
+учётом вызываемых функций); \texttt{go tool pprof -diff\_base} вычисляет
+
+\begin{equation}
+\delta_f = s_f^{\text{cur}} - s_f^{\text{base}}
+\label{eq:profdiff}
+\end{equation}
+
+раздельно для \texttt{flat} и \texttt{cum}, где $s_f$ — число сэмплов,
+приходящихся на функцию $f$. Функции ранжируются по $|\delta_f|$, и top-$N$
+(в реализации $N=10$) выводятся в отчёт. Аналогичное выражение применяется
+к heap-профилю с типом выборки \texttt{alloc\_space} (кумулятивный объём
+выделенной памяти на функцию за время прогона).
+
+\textbf{Связь с алгоритмической сложностью.} Отдельный частный случай
+регрессии, воспроизведённый в разделе~\ref{sec:razdel5} (сценарий
+\texttt{regression/\allowbreak quadratic-dedup}), — изменение класса временной
+сложности алгоритма. Если исходная реализация имеет сложность $T(n) = O(n)$
+(проход по хеш-таблице), а изменённая — $T(n) = O(n^2)$ (вложенный линейный
+поиск, определение по~\cite{clrs}), то при фиксированном размере входа
+$n=\text{const}$, используемом в бенчмарке, оба варианта дают лишь
+\emph{константный} множитель времени выполнения — сам факт квадратичной
+сложности не проявляется в единственном измерении при фиксированном $n$.
+Изменение класса сложности обнаруживается критерием~\eqref{eq:criterion}
+косвенно, через рост $\Delta_{b,m}$ при неизменном $n$, но не отличается
+формально от "обычного" замедления в $k$ раз без изменения сложности — для
+строгого различения потребовался бы бенчмарк с варьируемым $n$ и оценка
+показателя роста, что выходит за рамки данной работы и отмечено как
+направление дальнейшего исследования в заключении.
+
+\subsection{Концептуальная схема интеграции двухуровневого профилирования в пайплайн}
+\label{sec:2.3}
+
+Формализованный процесс (рис.~\ref{fig:2.1}) и критерий~\eqref{eq:criterion}
+определяют требования к артефактам, которые должна хранить и обновлять
+система (рис.~\ref{fig:2.2}): эталонный агрегированный отчёт
+(\texttt{baseline.txt}), эталонные pprof-профили
+(\texttt{baseline-cpu.pprof}, \texttt{baseline-mem.pprof}) и параметры
+критерия ($T$, $\alpha$, \texttt{-count}), являющиеся внешними по отношению
+к коду параметрами запуска, а не константами внутри приложения — это
+позволяет проводить эксперименты раздела~\ref{sec:razdel5} (перебор сетки
+$T \times \alpha$) без изменения кода прототипа.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=10mm and 10mm,
+  store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum height=14mm, minimum width=24mm, align=center, font=\small},
+  proc/.style={draw, rounded corners, minimum height=9mm, minimum width=32mm, align=center, font=\small},
+  arr/.style={-{Latex[length=2mm]}}
+]
+\node[store] (base) {baseline.txt};
+\node[store, below=6mm of base] (basecpu) {baseline-*.pprof};
+\node[proc, right=22mm of base] (app) {app/ (Go-приложение\\+ бенчмарки)};
+\node[proc, below=of app] (compare) {compare.sh\\(benchstat + критерий)};
+\node[proc, below=of compare] (diff) {profile-diff.sh\\(pprof diff\_base)};
+\node[proc, right=22mm of app] (ci) {CI (GitHub Actions):\\perf-check.yml};
+\node[proc, below=of ci] (summary) {\$GITHUB\_STEP\_SUMMARY\\+ pprof-artifact};
+
+\draw[arr] (base) -- (compare);
+\draw[arr] (basecpu) -- (diff);
+\draw[arr] (app) -- (compare);
+\draw[arr] (app) -- (diff);
+\draw[arr] (ci) -- (compare);
+\draw[arr] (ci) -- (diff);
+\draw[arr] (compare) -- (summary);
+\draw[arr] (diff) -- (summary);
+\draw[arr] (ci) -- (summary);
+\end{tikzpicture}
+\caption{Концептуальная схема артефактов и компонентов интеграции профилирования в CI/CD}
+\label{fig:2.2}
+\end{figure}
+
+\subsection{Выводы}
+
+\begin{enumerate}
+\item Разработана модель процесса профилирования в CI/CD-пайплайне
+(рис.~\ref{fig:2.1}) в виде схемы с ветвлением на решающий шаг
+(\texttt{benchstat}-сравнение) и диагностический шаг (pprof-\texttt{diff\_base}),
+выполняемые параллельно и независимо в рамках одного прогона CI.
+\item Формализован критерий обнаружения регрессии~\eqref{eq:criterion},
+сочетающий практическую значимость отклонения $\Delta_{b,m}$
+(выражение~\eqref{eq:delta}) и статистическую значимость $p_{b,m}$; итоговое
+решение по сборке определено как дизъюнкция по всем бенчмаркам и метрикам
+(выражение~\eqref{eq:fail}).
+\item Формализован диагностический критерий на уровне отдельной функции
+профиля~\eqref{eq:profdiff}, не влияющий на решение FAIL/OK, но
+предоставляющий объяснение причины регрессии без отдельного ручного
+профилирования.
+\item Показано (со ссылкой на определение алгоритмической сложности
+по~\cite{clrs}), что изменение класса временной сложности алгоритма при
+фиксированном размере входа $n$ бенчмарка формально неотличимо от обычного
+замедления в константное число раз — это ограничение модели явно
+зафиксировано и учтено при интерпретации сценария
+\texttt{regression/\allowbreak quadratic-dedup} в разделе~\ref{sec:razdel5}.
+\item Спроектирована концептуальная схема артефактов (рис.~\ref{fig:2.2}):
+параметры критерия ($T$, $\alpha$, \texttt{-count}) и эталонные данные
+(текстовый отчёт и бинарные pprof-профили) вынесены за пределы кода
+приложения, что позволяет проводить экспериментальную апробацию
+(раздел~\ref{sec:razdel5}) без изменения исходного кода прототипа.
+\end{enumerate}

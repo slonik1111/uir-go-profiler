@@ -1,0 +1,71 @@
+% Титульный лист — оформление аналогично реальному шаблону кафедры
+% (thesis-template-3-pz.pdf): шапка с линией и логотипом, крупный
+% заголовок "Пояснительная записка", название темы без кавычек с линией
+% под ним, левоориентированный блок полей вместо центрированного.
+% Не нумеруется (thispagestyle{empty}).
+\begin{titlepage}
+\thispagestyle{empty}
+\singlespacing
+
+\pzletterhead
+
+\vspace{0.35cm}
+\begin{center}
+Направление подготовки 09.03.04 Программная инженерия
+
+\vspace{0.5cm}
+{\fontsize{19}{22}\selectfont\bfseries Пояснительная записка}
+
+\vspace{0.15cm}
+к учебно-исследовательской работе студента на тему:
+
+\vspace{0.35cm}
+{\fontsize{14}{16}\selectfont
+Разработка прототипа системы интеграции непрерывного профилирования\\
+в CI/CD-пайплайн для раннего обнаружения регрессий\\
+производительности на языке Go}
+\end{center}
+\noindent\rule{\linewidth}{0.6pt}
+
+\vspace{0.4cm}
+\noindent
+\begin{tabular}{@{}p{4.6cm}p{4.8cm}@{\hspace{1.2cm}}p{5.5cm}@{}}
+Группа & \underline{Б22-544} & \\[5pt]
+Студент & \hrulefill & \underline{Портнов Л.М.} \\
+ & {\footnotesize (подпись)} & {\footnotesize (ФИО)} \\[4pt]
+Руководитель & \hrulefill & \underline{Климов В.В.} \\
+ & {\footnotesize (подпись)} & {\footnotesize (ФИО)} \\[4pt]
+Научный консультант & \hrulefill & \hrulefill \\
+ & {\footnotesize (подпись)} & {\footnotesize (ФИО)} \\
+\end{tabular}
+
+\vspace{0.35cm}
+\noindent
+\begin{tabular}{@{}p{5.5cm}p{5.5cm}@{}}
+Оценка руководителя & Оценка консультанта \\
+(0--30 баллов) & (0--30 баллов) \\[3pt]
+\hrulefill & \hrulefill \\
+\end{tabular}
+
+\vspace{0.3cm}
+\noindent Итоговая оценка \hrulefill\ \ ECTS \hrulefill\\
+\hspace*{2.3cm}(0--100 баллов)
+
+\vspace{0.4cm}
+\noindent\textbf{Комиссия}
+
+\vspace{0.25cm}
+\noindent
+\begin{tabular}{@{}p{3.2cm}p{4.5cm}p{4.5cm}@{}}
+Председатель & \hrulefill & \hrulefill \\
+ & {\footnotesize (подпись)} & {\footnotesize (ФИО)} \\[5pt]
+ & \hrulefill & \hrulefill \\[5pt]
+ & \hrulefill & \hrulefill \\[5pt]
+ & \hrulefill & \hrulefill \\
+\end{tabular}
+
+\vfill
+\begin{center}
+Москва 2026
+\end{center}
+\end{titlepage}

@@ -1,0 +1,245 @@
+\section{Программная реализация прототипа и модуля сравнения с эталоном}
+\label{sec:razdel4}
+
+\subsection{Разработка тестового Go-приложения как управляемой нагрузки}
+\label{sec:4.1}
+
+Пакет \texttt{app} (листинг полностью приведён в приложении~\ref{app:code})
+реализует единственный тип данных \texttt{Record} (запись с полями
+\texttt{ID}, \texttt{Name}, \texttt{Category}, \texttt{Amount}, \texttt{Active})
+и шесть экспортируемых функций обработки срезов таких записей:
+\texttt{ParseRecords} (разбор JSON), \texttt{FilterActive} (фильтрация по
+булеву полю), \texttt{FindByID} (линейный поиск), \texttt{Aggregate}
+(группировка сумм по категории через map), \texttt{FormatNames}
+(форматирование в строки) и \texttt{Deduplicate} (удаление повторов по
+\texttt{ID} с сохранением первого вхождения). Для каждой функции написан
+бенчмарк (\texttt{app/\allowbreak bench\_test.go}) на синтетическом наборе из 1000
+записей (\texttt{genRecords}), генерируемом детерминированно (без
+использования \texttt{math/\allowbreak rand}), что обеспечивает воспроизводимость
+измерений между прогонами. Для \texttt{FindByID} бенчмарк намеренно ищет
+заведомо отсутствующий \texttt{ID}, чтобы гарантировать полный проход по
+срезу на каждой итерации — иначе результат зависел бы от случайной позиции
+искомого элемента.
+
+Отдельно, в \texttt{app/\allowbreak processor\_test.go}, реализованы unit-тесты,
+проверяющие корректность бизнес-логики независимо от производительности
+(таблица~\ref{tab:4.1}) — эти тесты гарантируют, что скрипты сравнения
+(раздел~\ref{sec:4.3}) в сценариях \texttt{regression/\allowbreak *}
+(раздел~\ref{sec:razdel5}) сравнивают производительность функционально
+эквивалентного кода, а не случайно сломанной реализации.
+
+\begin{table}[htbp]
+\caption{Unit-тесты пакета \texttt{app}}
+\label{tab:4.1}
+\centering
+\begin{tabular}{ll}
+\toprule
+Тест & Проверяемое свойство \\
+\midrule
+\texttt{TestParseRecords} & корректный разбор, пустой массив, некорректный JSON \\
+\texttt{TestFilterActive} / \texttt{\_Empty} & фильтрация по \texttt{Active}, включая пустой вход \\
+\texttt{TestFindByID} & найденный и отсутствующий \texttt{ID} \\
+\texttt{TestAggregate} & суммирование по категориям \\
+\texttt{TestFormatNames} & формат строкового представления \\
+\texttt{TestDeduplicate} & отсутствие повторов \texttt{ID} на выходе \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Реализация критерия сравнения с эталоном}
+\label{sec:4.3}
+
+Критерий~\eqref{eq:criterion} реализован в \texttt{scripts/\allowbreak lib.sh} функцией
+\texttt{check\_regression\_csv}, принимающей CSV-отчёт \texttt{benchstat} и
+порог $T$ (листинг~\ref{lst:lib}). Вынесение этой функции в отдельный
+переиспользуемый файл — прямое следствие вывода раздела~\ref{sec:3.3}: до
+рефакторинга (см. историю коммитов прототипа) идентичная логика
+дублировалась в \texttt{compare.sh} и в каждом из экспериментальных
+скриптов раздела~\ref{sec:razdel5}, что создавало риск рассинхронизации
+критерия между решающим и экспериментальными путями. Функция построчно
+разбирает CSV, отслеживая текущую метрику (\texttt{sec/\allowbreak op}, \texttt{B/\allowbreak op},
+\texttt{allocs/\allowbreak op} — секции CSV-отчёта \texttt{benchstat} размечены пустой
+первой колонкой), отбирает строки с положительным изменением
+(\texttt{vs\_base} начинается на \texttt{+}, поскольку все три метрики
+lower-is-better) и через \texttt{awk} сравнивает величину изменения с
+порогом.
+
+\begin{lstlisting}[language=bash,caption={Критерий регрессии --- scripts/lib.sh (сокращено)},label={lst:lib}]
+check_regression_csv() {
+  local csv="$1" threshold="$2"
+  local metric=""
+  REGRESSED=0
+  ROWS=""
+  while IFS=, read -r name base_val base_ci cur_val cur_ci vs_base p_col; do
+    if [[ "$name" == "" && "$base_val" == "sec/op" ]]; then metric="ns/op"; continue; fi
+    # ... аналогично для B/op, allocs/op
+    [[ "$name" == "" || "$name" == "geomean" ]] && continue
+    [[ "${vs_base:0:1}" != "+" ]] && continue   # интересует только рост
+
+    local magnitude="${vs_base#+}"; magnitude="${magnitude//%/}"
+    if awk -v m="$magnitude" -v t="$threshold" 'BEGIN{exit !(m > t)}'; then
+      REGRESSED=1
+      ROWS="${ROWS}| ${metric} | ${name} | ${vs_base} | ... |"$'\n'
+    fi
+  done <"$csv"
+}
+\end{lstlisting}
+
+Условие $p_{b,m} < \alpha$ из критерия~\eqref{eq:criterion} в явном виде в
+листинге~\ref{lst:lib} не присутствует: оно обеспечивается тем, что
+\texttt{benchstat} вызывается с флагом \texttt{-alpha}, и сам не печатает
+относительное изменение (столбец \texttt{vs\_base}) для строк, где
+отличие статистически не значимо на этом уровне — вместо процента в CSV
+оказывается символ незначимости, который не начинается с \texttt{+} и
+поэтому естественно отфильтровывается условием \texttt{[[
+"\$\{vs\_base:0:1\}" != "+" ]]}. Такое распределение ответственности
+(``arithметика значимости'' — в \texttt{benchstat}, ``арифметика порога'' —
+в \texttt{lib.sh}) соответствует границе компонентов, установленной
+архитектурой (рис.~\ref{fig:3.1}).
+
+Скрипт \texttt{scripts/\allowbreak compare.sh} — точка входа решающего шага: запускает
+\texttt{go test -bench=. -benchmem -count=\$COUNT}, передаёт результат и
+\texttt{baseline.txt} в \texttt{benchstat -format=csv}, вызывает
+\texttt{check\_regression\_csv} и завершает процесс с кодом \texttt{1} при
+обнаруженной регрессии — код завершения интерпретируется GitHub Actions как
+падение шага и, соответственно, блокирует required-check pull request'а.
+
+Диагностический шаг реализован в \texttt{scripts/\allowbreak profile-diff.sh}: те же
+бенчмарки перезапускаются с флагами \texttt{-cpuprofile}/\texttt{-memprofile},
+после чего \texttt{go tool pprof -top -diff\_base=<эталон> -nodecount=10}
+формирует top-10 функций по каждому из двух профилей (CPU по cumulative
+time, heap по alloc\_space) и печатает результат в markdown-блоке кода —
+пригодном для непосредственной вставки в \texttt{\$GITHUB\_STEP\_SUMMARY}
+без дополнительного форматирования.
+
+\subsection{Настройка CI/CD-пайплайна с профилированием}
+\label{sec:4.2}
+
+CI-пайплайн (\texttt{.github/\allowbreak workflows/\allowbreak perf-check.yml}, листинг~\ref{lst:ci})
+запускается на каждое открытие/обновление pull request в \texttt{main} и
+последовательно выполняет оба шага модели процесса (рис.~\ref{fig:2.1}):
+решающий (\texttt{compare.sh}) и диагностический (\texttt{profile-diff.sh},
+запущенный с \texttt{if: always()}, то есть выполняющийся даже если
+предыдущий шаг завершился неудачей — иначе профиль для диагностики
+регрессии был бы недоступен именно в том прогоне, где она обнаружена).
+Сырые pprof-профили текущего прогона сохраняются шагом
+\texttt{actions/\allowbreak upload-artifact@v4}~\cite{gh-upload-artifact} и доступны для скачивания из интерфейса
+GitHub Actions в течение 14 дней — разработчик может открыть их локально
+интерактивным профилировщиком (\texttt{go tool pprof -http=:8080
+downloaded-cpu.pprof}) без повторного запуска бенчмарков на своей машине.
+
+\begin{lstlisting}[language=bash,caption={CI-пайплайн --- .github/workflows/perf-check.yml (ключевые шаги)},label={lst:ci}]
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+      - name: Compare benchmarks against baseline
+        run: ./scripts/compare.sh | tee "$GITHUB_STEP_SUMMARY"
+      - name: Profile and diff against baseline
+        if: always()
+        env: { CUR_DIR: /tmp/pprof-out }
+        run: ./scripts/profile-diff.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload pprof profiles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: pprof-profiles, path: /tmp/pprof-out/*.pprof }
+\end{lstlisting}
+
+Основные категории пользователей прототипа: \emph{разработчик} — автор
+pull request'а, локально запускающий \texttt{compare.sh}/\texttt{profile-diff.sh}
+перед отправкой изменений и читающий отчёт CI после отправки;
+\emph{ревьюер} — использует статус required-check и markdown-отчёт как
+основание для решения об одобрении слияния, не запуская инструменты
+самостоятельно; \emph{сопровождающий пайплайна} — обновляет эталонные
+данные (\texttt{scripts/\allowbreak capture-baseline-profiles.sh}, вручную по
+необходимости) при осознанном изменении производительности эталонной
+ветки. Основной сценарий использования — линейная последовательность:
+разработчик открывает PR $\to$ CI выполняет оба шага $\to$ отчёт публикуется
+в теле PR (рис.~\ref{fig:4.1}, пример реального вывода) $\to$ ревьюер
+принимает решение на основе статуса проверки.
+
+\begin{figure}[htbp]
+\centering
+\begin{lstlisting}[language={},basicstyle=\ttfamily\fontsize{8.5}{10}\selectfont,frame=single,backgroundcolor=\color{codebg}]
+## Отчёт сравнения производительности
+
+Порог: 10%, alpha: 0.05, повторов: 10, baseline: benchmarks/baseline.txt
+
+| Метрика | Бенчмарк | Δ | p |
+|---|---|---|---|
+| ns/op | Deduplicate-8 | +62.33% | 0.000 |
+
+FAIL: обнаружена регрессия производительности
+\end{lstlisting}
+\caption{Реальный вывод \texttt{compare.sh} на ветке regression/quadratic-dedup (величина отклонения варьируется между запусками из-за шума окружения раннера --- в независимых прогонах наблюдались значения от $+62\%$ до $+69\%$, см. раздел~\ref{sec:5.4})}
+\label{fig:4.1}
+\end{figure}
+
+\subsection{Тестирование прототипа}
+\label{sec:4.4}
+
+Тестирование прототипа выполнялось на двух независимых уровнях. Во-первых,
+корректность \emph{бизнес-логики} тестового приложения — стандартными
+Go unit-тестами (таблица~\ref{tab:4.1}), выполняемыми командой \texttt{go
+test ./\allowbreak ...} и не связанными с производительностью. Во-вторых, корректность
+\emph{самого механизма обнаружения регрессий} — тест-планом, где каждая из
+четырёх веток \texttt{regression/\allowbreak *} (описаны подробно в
+разделе~\ref{sec:5.1}) выступает тестовым случаем с заранее известным
+ожидаемым исходом ("должен провалиться"), а ветка \texttt{main} (без
+внесённых изменений) — контрольным случаем с ожидаемым исходом "не должен
+провалиться" (проверка отсутствия ложных срабатываний). Такой тест-план
+формально эквивалентен приёмочному тестированию: вместо того чтобы
+проверять выход функции на фиксированном входе, он проверяет выход всего
+пайплайна (\texttt{compare.sh}) на фиксированном изменении кода.
+Количественные результаты этого тестирования, включая перебор сетки
+параметров $T \times \alpha$, вынесены в раздел~\ref{sec:razdel5}, поскольку
+представляют самостоятельный экспериментальный результат, а не просто
+факт прохождения/непрохождения теста.
+
+Сравнение с аналогами (таблица~\ref{tab:1.1}) в части "достигнутых
+системных показателей" сведено к двум характеристикам, для которых
+у сопоставимых Go-ориентированных инструментов (benchmark-action,
+CodSpeed) отсутствуют открыто публикуемые числа: (а) корректность
+обнаружения на управляемых сценариях (раздел~\ref{sec:5.2}) и
+(б) накладные расходы pprof-профилирования, добавленные к длительности
+CI-джобы (раздел~\ref{sec:5.3}) — сопоставление именно этих двух
+характеристик и составляет предмет экспериментальной апробации.
+
+\subsection{Выводы}
+
+\begin{enumerate}
+\item Реализовано тестовое Go-приложение (пакет \texttt{app}, 6 функций,
+6 бенчмарков, 6 unit-тестов) как управляемая, воспроизводимая нагрузка для
+демонстрации работы системы профилирования; воспроизводимость обеспечена
+детерминированной генерацией тестовых данных без использования
+источников случайности.
+\item Реализован критерий обнаружения регрессии~\eqref{eq:criterion} в виде
+переиспользуемой функции \texttt{check\_regression\_csv}
+(\texttt{scripts/\allowbreak lib.sh}), вызываемой как решающим скриптом
+(\texttt{compare.sh}), так и всеми тремя экспериментальными скриптами
+раздела~\ref{sec:razdel5} — это устраняет риск рассинхронизации логики
+критерия между продуктивным и экспериментальным путями выполнения.
+\item Реализован диагностический механизм \texttt{profile-diff.sh},
+дополняющий решающий шаг: снимает CPU/heap pprof-профили текущего прогона
+и сравнивает их с эталонными на уровне отдельных функций через
+\texttt{go tool pprof -diff\_base}, публикуя top-10 функций по каждому
+профилю в отчёте.
+\item Оба шага интегрированы в единый CI-пайплайн на GitHub Actions,
+выполняющийся на каждый pull request; диагностический шаг настроен на
+выполнение независимо от исхода решающего (\texttt{if: always()}), а сырые
+профили сохраняются как артефакт джобы на 14 дней для последующего
+интерактивного анализа.
+\item Разработан двухуровневый тест-план прототипа: unit-тесты бизнес-логики
+приложения (не зависят от производительности) и приёмочный тест-план
+механизма обнаружения регрессий на четырёх управляемых сценариях плюс
+контрольном сценарии без изменений — количественные результаты вынесены
+в раздел~\ref{sec:razdel5} как самостоятельный экспериментальный результат.
+\end{enumerate}

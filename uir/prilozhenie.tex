@@ -1,0 +1,152 @@
+\section*{Приложение 1. Модульная спецификация и алгоритмическое описание}
+\addcontentsline{toc}{section}{Приложение 1. Модульная спецификация и алгоритмическое описание}
+\renewcommand{\thetable}{П1.\arabic{table}}
+\setcounter{table}{0}
+
+\subsection*{П1.1. Модульная спецификация пакета \texttt{app}}
+
+Пакет \texttt{app} (модуль \texttt{uir-go-profiler/\allowbreak app}) состоит из одного
+файла \texttt{processor.go}, определяющего один тип данных и шесть
+экспортируемых функций обработки. Полная спецификация — таблица~\ref{tab:p1.1}.
+
+\begin{table}[htbp]
+\caption{Модульная спецификация пакета \texttt{app}}
+\label{tab:p1.1}
+\centering
+\begin{tabular}{p{3.1cm}p{6.6cm}p{4.3cm}}
+\toprule
+Имя & Сигнатура & Назначение \\
+\midrule
+\texttt{Record} & \texttt{struct\{ID int; Name string; Category string; Amount float64; Active bool\}} & доменная сущность, обрабатываемая всеми функциями пакета \\
+\texttt{ParseRecords} & \texttt{func([]byte) ([]Record, error)} & декодирует JSON-массив записей; возвращает обёрнутую ошибку при некорректном JSON \\
+\texttt{FilterActive} & \texttt{func([]Record) []Record} & возвращает подмножество записей с \texttt{Active == true}, сохраняя порядок \\
+\texttt{FindByID} & \texttt{func([]Record, int) (Record, bool)} & линейный поиск записи по \texttt{ID}; второе значение — признак найдена/нет \\
+\texttt{Aggregate} & \texttt{func([]Record) map[string]float64} & суммирует \texttt{Amount} по значению \texttt{Category} \\
+\texttt{FormatNames} & \texttt{func([]Record) []string} & форматирует каждую запись в строку вида \texttt{"Имя (Категория): \$Сумма"} \\
+\texttt{Deduplicate} & \texttt{func([]Record) []Record} & удаляет записи с повторяющимся \texttt{ID}, сохраняя первое вхождение \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Все функции — чистые (без побочных эффектов, без обращения к глобальному
+изменяемому состоянию, за единственным намеренным исключением в
+диагностическом сценарии \texttt{regression/\allowbreak memory-growth}, где вводится
+пакетная переменная \texttt{aggregateHistory} для демонстрации утечки
+памяти, раздел~\ref{sec:5.1}), что обеспечивает воспроизводимость измерений
+между запусками бенчмарков.
+
+\subsection*{П1.2. Алгоритмическое описание критерия обнаружения регрессии}
+
+Представление выбрано единообразно для всех алгоритмов данного приложения —
+псевдокод в нотации \texttt{algorithmicx} (императивный стиль, близкий к
+Go). Алгоритм~\ref{alg:criterion} — псевдокод критерия~\eqref{eq:criterion}
+из раздела~\ref{sec:2.2}, реализованного в \texttt{scripts/\allowbreak compare.sh} и
+\texttt{scripts/\allowbreak lib.sh}.
+
+\begin{algorithm}[htbp]
+\caption{Обнаружение регрессии производительности}
+\label{alg:criterion}
+\begin{algorithmic}[1]
+\Function{DetectRegression}{$baseline$, $pkg$, $T$, $\alpha$, $count$}
+  \State $current \gets \Call{RunBenchmarks}{pkg, count}$ \Comment{go test -bench -count=$count$}
+  \State $report \gets \Call{Benchstat}{baseline, current, \alpha}$ \Comment{CSV: $\Delta_{b,m}$, значимость по $\alpha$}
+  \State $regressed \gets \textbf{false}$
+  \ForAll{$(b, m, \Delta_{b,m}) \in report$} \Comment{только значимые на уровне $\alpha$ строки}
+    \If{$\Delta_{b,m} > T$}
+      \State $regressed \gets \textbf{true}$
+      \State \Call{AppendReportRow}{$b$, $m$, $\Delta_{b,m}$}
+    \EndIf
+  \EndFor
+  \If{$regressed$}
+    \State \Return FAIL \Comment{код завершения 1 --- блокирует merge}
+  \Else
+    \State \Return OK
+  \EndIf
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+Алгоритм~\ref{alg:dedup} сопоставляет две реализации \texttt{Deduplicate}
+(эталонную, $O(n)$, и внесённую сценарием \texttt{regression/\allowbreak quadratic-dedup},
+$O(n^2)$, раздел~\ref{sec:2.2}) в едином представлении, чтобы разница в
+сложности была видна непосредственно из структуры псевдокода (вложенный
+цикл по уже обработанному префиксу вместо обращения к хеш-таблице).
+
+\begin{algorithm}[htbp]
+\caption{Deduplicate --- эталонная ($O(n)$) и регрессионная ($O(n^2)$) реализации}
+\label{alg:dedup}
+\begin{algorithmic}[1]
+\Function{Deduplicate\_Baseline}{$records$} \Comment{$O(n)$}
+  \State $seen \gets \emptyset$ \Comment{хеш-множество, амортизированный $O(1)$ доступ}
+  \State $result \gets []$
+  \For{$r \in records$}
+    \If{$r.ID \notin seen$}
+      \State $seen \gets seen \cup \{r.ID\}$
+      \State $result.\Call{Append}{r}$
+    \EndIf
+  \EndFor
+  \State \Return $result$
+\EndFunction
+\Statex
+\Function{Deduplicate\_Quadratic}{$records$} \Comment{$O(n^2)$ --- сценарий regression/quadratic-dedup}
+  \State $result \gets []$
+  \For{$i \gets 0 \dots n-1$}
+    \State $duplicate \gets \textbf{false}$
+    \For{$j \gets 0 \dots i-1$} \Comment{линейный поиск по уже обработанному префиксу}
+      \If{$records[j].ID = records[i].ID$}
+        \State $duplicate \gets \textbf{true}$; \textbf{break}
+      \EndIf
+    \EndFor
+    \If{\textbf{not} $duplicate$}
+      \State $result.\Call{Append}{records[i]}$
+    \EndIf
+  \EndFor
+  \State \Return $result$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\clearpage
+\section*{Приложение 2. Исходный код прототипа}
+\label{app:code}
+\addcontentsline{toc}{section}{Приложение 2. Исходный код прототипа}
+
+Полный исходный код доступен в репозитории прототипа; ниже приведены все
+файлы, определяющие поведение системы (тестовое приложение, слой сравнения,
+CI-пайплайн). Все функции пакета \texttt{app} снабжены комментариями в
+формате godoc непосредственно перед объявлением (стандарт комментирования
+экосистемы Go, аналог Javadoc/Doxygen); скрипты слоя сравнения
+комментированы построчно перед каждым содержательным блоком.
+
+\subsection*{П2.1. \texttt{app/\allowbreak processor.go} --- бизнес-логика тестового приложения}
+\lstinputlisting[language=Go]{../app/processor.go}
+
+\subsection*{П2.2. \texttt{app/\allowbreak processor\_test.go} --- unit-тесты}
+\lstinputlisting[language=Go]{../app/processor_test.go}
+
+\subsection*{П2.3. \texttt{app/\allowbreak bench\_test.go} --- бенчмарки}
+\lstinputlisting[language=Go]{../app/bench_test.go}
+
+\subsection*{П2.4. \texttt{scripts/\allowbreak lib.sh} --- реализация критерия регрессии}
+\lstinputlisting[language=bash]{../scripts/lib.sh}
+
+\subsection*{П2.5. \texttt{scripts/\allowbreak compare.sh} --- решающий шаг}
+\lstinputlisting[language=bash]{../scripts/compare.sh}
+
+\subsection*{П2.6. \texttt{scripts/\allowbreak profile-diff.sh} --- диагностический шаг (pprof)}
+\lstinputlisting[language=bash]{../scripts/profile-diff.sh}
+
+\subsection*{П2.7. \texttt{scripts/\allowbreak capture-baseline-profiles.sh} --- генерация эталонных профилей}
+\lstinputlisting[language=bash]{../scripts/capture-baseline-profiles.sh}
+
+\subsection*{П2.8. \texttt{scripts/\allowbreak experiments/\allowbreak sensitivity.sh} --- эксперимент раздела 5.2 (чувствительность порога)}
+\lstinputlisting[language=bash]{../scripts/experiments/sensitivity.sh}
+
+\subsection*{П2.9. \texttt{scripts/\allowbreak experiments/\allowbreak power\_analysis.sh} --- эксперимент раздела 5.2 (мощность критерия)}
+\lstinputlisting[language=bash]{../scripts/experiments/power_analysis.sh}
+
+\subsection*{П2.10. \texttt{scripts/\allowbreak experiments/\allowbreak overhead.sh} --- эксперимент раздела 5.3 (накладные расходы)}
+\lstinputlisting[language=bash]{../scripts/experiments/overhead.sh}
+
+\subsection*{П2.11. \texttt{.github/\allowbreak workflows/\allowbreak perf-check.yml} --- CI-пайплайн}
+\lstinputlisting[basicstyle=\ttfamily\fontsize{9}{10.5}\selectfont]{../.github/workflows/perf-check.yml}

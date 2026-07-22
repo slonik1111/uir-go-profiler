@@ -1,0 +1,66 @@
+name: experiments
+
+# Ручной запуск исследовательских экспериментов (раздел 5) на реальном
+# GitHub Actions раннере, а не локально. Не привязан к pull_request —
+# запускается вручную через вкладку Actions -> experiments -> Run workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      power_trials:
+        description: "TRIALS для power_analysis.sh"
+        default: "5"
+      power_counts:
+        description: "COUNTS для power_analysis.sh"
+        default: "3 5 10 20"
+      overhead_trials:
+        description: "TRIALS для overhead.sh"
+        default: "10"
+
+jobs:
+  experiments:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create local tracking branches for all scenarios
+        run: |
+          git fetch origin 'refs/heads/*:refs/remotes/origin/*'
+          for b in main regression/extra-allocation regression/quadratic-dedup regression/latency regression/memory-growth; do
+            git branch --track "$b" "origin/$b" 2>/dev/null || true
+          done
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run sensitivity.sh (5.2)
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          ./scripts/experiments/sensitivity.sh
+
+      - name: Run power_analysis.sh (5.2)
+        env:
+          TRIALS: ${{ github.event.inputs.power_trials }}
+          COUNTS: ${{ github.event.inputs.power_counts }}
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          ./scripts/experiments/power_analysis.sh
+
+      - name: Run overhead.sh (5.3)
+        env:
+          TRIALS: ${{ github.event.inputs.overhead_trials }}
+          COUNT: "10"
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          ./scripts/experiments/overhead.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: experiment-results
+          path: experiments/*.csv

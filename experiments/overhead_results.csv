@@ -1,0 +1,11 @@
+mode,trial,wall_seconds,profile_bytes
+plain,1,43.335,0
+profiled,1,42.342,50848
+plain,2,41.837,0
+profiled,2,44.658,52704
+plain,3,42.002,0
+profiled,3,46.183,55140
+plain,4,47.390,0
+profiled,4,47.074,54942
+plain,5,44.084,0
+profiled,5,43.182,50413

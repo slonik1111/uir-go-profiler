@@ -23,3 +23,21 @@ jobs:
           set -euo pipefail
           export PATH="$PATH:$(go env GOPATH)/bin"
           ./scripts/compare.sh | tee "$GITHUB_STEP_SUMMARY"
+
+      - name: Profile and diff against baseline
+        if: always()
+        shell: bash
+        env:
+          CUR_DIR: /tmp/pprof-out
+        run: |
+          set -euo pipefail
+          ./scripts/profile-diff.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pprof profiles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pprof-profiles
+          path: /tmp/pprof-out/*.pprof
+          if-no-files-found: ignore
+          retention-days: 14

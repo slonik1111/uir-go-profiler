@@ -2,3 +2,13 @@
 *.test
 /scratch/
 .claude/
+
+# LaTeX build artifacts (uir/)
+uir/*.aux
+uir/*.log
+uir/*.toc
+uir/*.out
+uir/*.synctex.gz
+uir/*.fls
+uir/*.fdb_latexmk
+uir/*.pdf
