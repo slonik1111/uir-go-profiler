@@ -64,14 +64,18 @@ func FormatNames(records []Record) []string {
 
 // Deduplicate removes records with a repeated ID, keeping the first occurrence.
 func Deduplicate(records []Record) []Record {
-	seen := make(map[int]struct{}, len(records))
 	result := make([]Record, 0, len(records))
-	for _, r := range records {
-		if _, ok := seen[r.ID]; ok {
-			continue
+	for i, r := range records {
+		duplicate := false
+		for j := range i {
+			if records[j].ID == r.ID {
+				duplicate = true
+				break
+			}
 		}
-		seen[r.ID] = struct{}{}
-		result = append(result, r)
+		if !duplicate {
+			result = append(result, r)
+		}
 	}
 	return result
 }
