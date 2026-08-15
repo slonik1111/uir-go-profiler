@@ -79,6 +79,13 @@ jobs:
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
           ./scripts/experiments/sensitivity.sh
+          # sensitivity.sh пишет результат прямо в отслеживаемый файл, не
+          # коммитя его. Если оставить как есть, следующий скрипт (который
+          # тоже переключает ветки) откажется работать — git checkout не
+          # даст затереть этот незакоммиченный файл. Коммитим сразу.
+          git add experiments/sensitivity_results.csv
+          git diff --cached --quiet || git commit -m "Update sensitivity_results.csv (runner-native)"
+          git push origin HEAD:main
 
       - name: Run power_analysis.sh (5.2)
         env:
@@ -87,6 +94,9 @@ jobs:
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
           ./scripts/experiments/power_analysis.sh
+          git add experiments/power_results.csv
+          git diff --cached --quiet || git commit -m "Update power_results.csv (runner-native)"
+          git push origin HEAD:main
 
       - name: Run overhead.sh (5.3)
         env:
@@ -95,6 +105,9 @@ jobs:
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
           ./scripts/experiments/overhead.sh
+          git add experiments/overhead_results.csv
+          git diff --cached --quiet || git commit -m "Update overhead_results.csv (runner-native)"
+          git push origin HEAD:main
 
       - uses: actions/upload-artifact@v4
         with:
