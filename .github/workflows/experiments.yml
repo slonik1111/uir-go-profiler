@@ -17,6 +17,9 @@ on:
         description: "TRIALS для overhead.sh"
         default: "10"
 
+permissions:
+  contents: write
+
 jobs:
   experiments:
     runs-on: ubuntu-latest
@@ -38,6 +41,39 @@ jobs:
 
       - name: Install benchstat
         run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Recapture baseline on this runner and sync it to all branches
+        # benchmarks/baseline.txt (и baseline-*.pprof) были изначально сняты
+        # на ноутбуке разработчика (Intel i5-10300H), а не на раннере
+        # GitHub Actions. Сравнение "раннер vs. ноутбук" примешивает разницу
+        # железа к любому результату sensitivity/power/overhead и к
+        # perf-check.yml на реальных PR. Пересъём здесь и синхронизация во
+        # все ветки regression/* делает эталон и кандидата сопоставимыми:
+        # оба измерены на одном и том же классе раннера.
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          go test ./app/... -bench=. -benchmem -run=^$ -count=10 >benchmarks/baseline.txt
+          ./scripts/capture-baseline-profiles.sh
+
+          git add benchmarks/baseline.txt benchmarks/baseline-cpu.pprof benchmarks/baseline-mem.pprof
+          git diff --cached --quiet || git commit -m "Recapture baseline on GitHub Actions runner (runner-native comparison)"
+          git push origin HEAD:main
+
+          mkdir -p /tmp/baseline-sync
+          cp benchmarks/baseline.txt benchmarks/baseline-cpu.pprof benchmarks/baseline-mem.pprof /tmp/baseline-sync/
+
+          for b in regression/extra-allocation regression/quadratic-dedup regression/latency regression/memory-growth; do
+            git checkout -q "$b"
+            cp /tmp/baseline-sync/* benchmarks/
+            git add benchmarks/baseline.txt benchmarks/baseline-cpu.pprof benchmarks/baseline-mem.pprof
+            git diff --cached --quiet || git commit -m "Sync runner-native baseline from main"
+            git push origin "HEAD:$b"
+          done
+
+          git checkout -q main
 
       - name: Run sensitivity.sh (5.2)
         run: |

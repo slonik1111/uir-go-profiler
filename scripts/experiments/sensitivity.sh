@@ -15,6 +15,13 @@ cd "$REPO_ROOT"
 source scripts/lib.sh
 
 BASELINE="${BASELINE:-benchmarks/baseline.txt}"
+# Копия ВНЕ рабочего дерева: baseline.txt отслеживается git и в принципе
+# может отличаться между ветками (даже если сейчас не отличается) — без
+# этого git checkout сценария молча подставлял бы ЕГО СОБСТВЕННЫЙ
+# baseline.txt вместо фиксированного эталона, снятого один раз на main.
+BASELINE_COPY="$(mktemp)"
+cp "$BASELINE" "$BASELINE_COPY"
+BASELINE="$BASELINE_COPY"
 COUNT="${COUNT:-10}"
 ALPHAS=(${ALPHAS:-0.01 0.05 0.10})
 THRESHOLDS=(${THRESHOLDS:-5 10 15 20 30 50})
@@ -34,7 +41,7 @@ OUT="$(mktemp)"
 echo "scenario,alpha,threshold,detected" >"$OUT"
 
 ORIG_BRANCH="$(git branch --show-current)"
-trap 'git checkout -q "$ORIG_BRANCH" 2>/dev/null || true; rm -f "$OUT"' EXIT
+trap 'git checkout -q "$ORIG_BRANCH" 2>/dev/null || true; rm -f "$OUT" "$BASELINE_COPY"' EXIT
 
 for scenario in "${SCENARIOS[@]}"; do
   echo "== $scenario: running benchmarks (count=$COUNT) ==" >&2
