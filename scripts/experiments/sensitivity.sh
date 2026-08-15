@@ -26,11 +26,15 @@ command -v benchstat >/dev/null 2>&1 || {
 }
 
 mkdir -p experiments
-OUT="experiments/sensitivity_results.csv"
+FINAL_OUT="experiments/sensitivity_results.csv"
+# Пишем во временный файл ВНЕ рабочего дерева: FINAL_OUT отслеживается git,
+# и запись в него между git checkout приводила бы к отказу checkout
+# ("local changes would be overwritten") на втором же сценарии.
+OUT="$(mktemp)"
 echo "scenario,alpha,threshold,detected" >"$OUT"
 
 ORIG_BRANCH="$(git branch --show-current)"
-trap 'git checkout -q "$ORIG_BRANCH"' EXIT
+trap 'git checkout -q "$ORIG_BRANCH" 2>/dev/null || true; rm -f "$OUT"' EXIT
 
 for scenario in "${SCENARIOS[@]}"; do
   echo "== $scenario: running benchmarks (count=$COUNT) ==" >&2
@@ -52,4 +56,7 @@ for scenario in "${SCENARIOS[@]}"; do
   rm -f "$CURRENT"
 done
 
-echo "Результаты: $OUT" >&2
+git checkout -q "$ORIG_BRANCH"
+cp "$OUT" "$FINAL_OUT"
+
+echo "Результаты: $FINAL_OUT" >&2
