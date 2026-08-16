@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Раздел 5.2 — чувствительность порога обнаружения.
+# Section 5.2 -- sensitivity of the detection threshold.
 #
-# Для каждого сценария (main = фоновый шум без изменений, плюс 4 ветки
-# regression/*) собирает ОДИН прогон бенчмарков, а затем прогоняет через него
-# все комбинации alpha x threshold (benchstat по CSV — дёшево, повторный
-# go test не нужен). Результат: experiments/sensitivity_results.csv со
-# столбцами scenario,alpha,threshold,detected — на main "detected=1" это
-# ложное срабатывание, на regression/* — успешное обнаружение.
+# For each scenario (main = background noise with no changes, plus the 4
+# regression/* branches) collects ONE run of benchmarks, then runs it
+# through every combination of alpha x threshold (benchstat via CSV is
+# cheap, no need to repeat go test). Result: experiments/sensitivity_results.csv
+# with columns scenario,alpha,threshold,detected -- on main "detected=1" is
+# a false positive, on regression/* it is a successful detection.
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 source scripts/lib.sh
 
 BASELINE="${BASELINE:-benchmarks/baseline.txt}"
-# Копия ВНЕ рабочего дерева: baseline.txt отслеживается git и в принципе
-# может отличаться между ветками (даже если сейчас не отличается) — без
-# этого git checkout сценария молча подставлял бы ЕГО СОБСТВЕННЫЙ
-# baseline.txt вместо фиксированного эталона, снятого один раз на main.
+# Copy OUTSIDE the working tree: baseline.txt is tracked by git and could
+# in principle differ between branches (even if it doesn't right now) --
+# without this, a scenario's git checkout would silently swap in ITS OWN
+# baseline.txt instead of the fixed reference captured once on main.
 BASELINE_COPY="$(mktemp)"
 cp "$BASELINE" "$BASELINE_COPY"
 BASELINE="$BASELINE_COPY"
@@ -34,9 +34,9 @@ command -v benchstat >/dev/null 2>&1 || {
 
 mkdir -p experiments
 FINAL_OUT="experiments/sensitivity_results.csv"
-# Пишем во временный файл ВНЕ рабочего дерева: FINAL_OUT отслеживается git,
-# и запись в него между git checkout приводила бы к отказу checkout
-# ("local changes would be overwritten") на втором же сценарии.
+# Write to a temp file OUTSIDE the working tree: FINAL_OUT is tracked by
+# git, and writing to it between git checkouts would make the checkout
+# fail ("local changes would be overwritten") on the very second scenario.
 OUT="$(mktemp)"
 echo "scenario,alpha,threshold,detected" >"$OUT"
 
