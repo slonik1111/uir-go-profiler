@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Captures the baseline CPU and heap profiles (Section 2.3 / 3.3: a profile
-# as an artifact alongside benchmarks/baseline.txt). Run once on main after
-# any deliberate change to the baseline's performance; the result is
-# committed to the repository and used by scripts/profile-diff.sh as the
-# reference for comparison (go tool pprof -diff_base).
+# Снимает эталонные CPU- и heap-профили (раздел 2.3 / 3.3: профиль как
+# артефакт наравне с benchmarks/baseline.txt). Запускается один раз на main
+# после каждого осознанного изменения производительности эталона; результат
+# коммитится в репозиторий и используется scripts/profile-diff.sh как база
+# для сравнения (go tool pprof -diff_base).
 #
-# Does not touch benchmarks/baseline.txt -- that one is generated/updated
-# separately, to avoid desynchronizing the already-computed experiments/*.csv.
+# Не трогает benchmarks/baseline.txt — тот генерируется/обновляется отдельно,
+# чтобы не рассинхронизировать уже посчитанные experiments/*.csv.
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"

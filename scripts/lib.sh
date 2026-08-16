@@ -3,7 +3,7 @@
 #
 # check_regression_csv CSV THRESHOLD
 #   Reads a `benchstat -format=csv` report and applies the magnitude part of
-#   the regression criterion from Section 2.2 (the p < ALPHA part is already
+#   the regression criterion from раздел 2.2 (the p < ALPHA part is already
 #   enforced by benchstat itself via its -alpha flag: it prints "~" instead
 #   of a percentage for changes that aren't significant).
 #   Only increases count — ns/op, B/op and allocs/op are all lower-is-better.

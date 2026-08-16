@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Section 5.3 -- minimum detectable regression vs. benchmark repeat count.
+# Раздел 5.3 — минимально обнаружимая регрессия vs число повторов бенчмарка.
 #
-# For each scenario and each -count value, independently repeats TRIALS
-# times: a fresh benchmark run -> benchstat -> threshold check. Independent
-# runs are required (not reusing a single file, as in sensitivity.sh),
-# because the object under study is precisely how RANDOM noise at different
-# repeat counts affects the detection probability.
+# Для каждого сценария и каждого значения -count независимо повторяет TRIALS
+# раз: свежий прогон бенчмарков -> benchstat -> проверка порога. Нужны именно
+# независимые прогоны (не переиспользование одного файла, как в
+# sensitivity.sh), потому что сам объект изучения — это то, как СЛУЧАЙНЫЙ шум
+# при разном числе повторов влияет на вероятность обнаружения.
 #
-# Result: experiments/power_results.csv with columns
-# scenario,count,trial,detected. The default parameters are small (this is
-# a demo run) -- for a real study, increase TRIALS and COUNTS (each extra
-# run costs time: count is proportional to the time of a single
-# go test -bench).
+# Результат: experiments/power_results.csv со столбцами
+# scenario,count,trial,detected. По умолчанию параметры маленькие (это
+# демо-прогон) — для реального исследования увеличьте TRIALS и COUNTS
+# (каждый дополнительный прогон стоит времени: count пропорционален времени
+# одного go test -bench).
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 source scripts/lib.sh
 
 BASELINE="${BASELINE:-benchmarks/baseline.txt}"
-# Copy OUTSIDE the working tree: baseline.txt is tracked by git and could
-# in principle differ between branches (even if it doesn't right now) --
-# without this, a scenario's git checkout would silently swap in ITS OWN
-# baseline.txt instead of the fixed reference captured once on main.
+# Копия ВНЕ рабочего дерева: baseline.txt отслеживается git и в принципе
+# может отличаться между ветками (даже если сейчас не отличается) — без
+# этого git checkout сценария молча подставлял бы ЕГО СОБСТВЕННЫЙ
+# baseline.txt вместо фиксированного эталона, снятого один раз на main.
 BASELINE_COPY="$(mktemp)"
 cp "$BASELINE" "$BASELINE_COPY"
 BASELINE="$BASELINE_COPY"
@@ -40,9 +40,9 @@ command -v benchstat >/dev/null 2>&1 || {
 
 mkdir -p experiments
 FINAL_OUT="experiments/power_results.csv"
-# Write to a temp file OUTSIDE the working tree: FINAL_OUT is tracked by
-# git, and writing to it between git checkouts would make the checkout
-# fail ("local changes would be overwritten") on the very second scenario.
+# Пишем во временный файл ВНЕ рабочего дерева: FINAL_OUT отслеживается git,
+# и запись в него между git checkout приводила бы к отказу checkout
+# ("local changes would be overwritten") на втором же сценарии.
 OUT="$(mktemp)"
 echo "scenario,count,trial,detected" >"$OUT"
 

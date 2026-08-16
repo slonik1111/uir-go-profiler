@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Continuous profiling in the narrow sense: captures CPU and heap profiles
-# of the current tree (go test -cpuprofile/-memprofile, i.e. real pprof
-# samples, not just the aggregated ns/op from benchstat) and compares them
-# against the baseline profiles via `go tool pprof -diff_base`. Shows WHICH
-# functions got "heavier" and by how much -- something benchstat cannot give
-# in principle, since it only sees the benchmark's total time/allocations,
-# not a breakdown by call-site function.
+# Непрерывное профилирование в узком смысле: снимает CPU- и heap-профили
+# текущего дерева (go test -cpuprofile/-memprofile, т.е. настоящие
+# pprof-сэмплы, а не только агрегированные ns/op из benchstat) и сравнивает
+# их с эталонными профилями через `go tool pprof -diff_base`. Показывает,
+# КАКИЕ функции стали "тяжелее" и на сколько — то, чего benchstat в принципе
+# не может дать, так как он видит только суммарное время/аллокации бенчмарка
+# целиком, а не разбивку по функциям вызова.
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"

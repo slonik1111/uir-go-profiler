@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Compares current benchmark results against benchmarks/baseline.txt using
-# benchstat, and applies the regression criterion from Section 2.2:
+# benchstat, and applies the regression criterion from раздел 2.2:
 #   regression  <=>  (Δ metric > THRESHOLD%)  AND  (p < ALPHA)
 # See scripts/lib.sh for how the criterion is evaluated.
 

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Section 5.3 -- overhead of profiling in CI/CD.
+# Раздел 5.3 — накладные расходы профилирования в CI/CD.
 #
-# Compares the execution time of the same set of benchmarks in two modes:
-# "plain" (benchstat comparison only, as in compare.sh) and "profiled" (the
-# same run plus -cpuprofile/-memprofile, as in profile-diff.sh). TRIALS
-# independent runs per mode, with the mode order alternated so as not to
-# confuse the CI runner's warm-up/noise effect with the effect of profiling.
+# Сравнивает время выполнения одного и того же набора бенчмарков в двух
+# режимах: "plain" (только benchstat-сравнение, как в compare.sh) и
+# "profiled" (тот же прогон плюс -cpuprofile/-memprofile, как в
+# profile-diff.sh). TRIALS независимых прогонов на каждый режим, порядок
+# режимов чередуется, чтобы не путать эффект прогрева/шума CI-раннера с
+# эффектом профилирования.
 #
-# Result: experiments/overhead_results.csv with columns
-# mode,trial,wall_seconds,profile_bytes (profile_bytes=0 for plain).
+# Результат: experiments/overhead_results.csv со столбцами
+# mode,trial,wall_seconds,profile_bytes (profile_bytes=0 для plain).
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
