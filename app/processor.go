@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Record is the domain entity processed by every function in this package.
+// Record — доменная сущность, обрабатываемая всеми функциями пакета.
 type Record struct {
 	ID       int     `json:"id"`
 	Name     string  `json:"name"`
@@ -14,7 +14,7 @@ type Record struct {
 	Active   bool    `json:"active"`
 }
 
-// ParseRecords decodes a JSON array of records.
+// ParseRecords декодирует JSON-массив записей.
 func ParseRecords(data []byte) ([]Record, error) {
 	var records []Record
 	if err := json.Unmarshal(data, &records); err != nil {
@@ -23,7 +23,7 @@ func ParseRecords(data []byte) ([]Record, error) {
 	return records, nil
 }
 
-// FilterActive returns the subset of records with Active set to true.
+// FilterActive возвращает подмножество записей с Active == true.
 func FilterActive(records []Record) []Record {
 	active := make([]Record, 0, len(records))
 	for _, r := range records {
@@ -34,7 +34,7 @@ func FilterActive(records []Record) []Record {
 	return active
 }
 
-// FindByID performs a linear scan for a record with the given ID.
+// FindByID выполняет линейный поиск записи по заданному ID.
 func FindByID(records []Record, id int) (Record, bool) {
 	for _, r := range records {
 		if r.ID == id {
@@ -44,7 +44,7 @@ func FindByID(records []Record, id int) (Record, bool) {
 	return Record{}, false
 }
 
-// Aggregate sums Amount per Category.
+// Aggregate суммирует Amount по значению Category.
 func Aggregate(records []Record) map[string]float64 {
 	totals := make(map[string]float64, len(records))
 	for _, r := range records {
@@ -53,7 +53,7 @@ func Aggregate(records []Record) map[string]float64 {
 	return totals
 }
 
-// FormatNames renders each record as a human-readable "name (category): $amount" line.
+// FormatNames форматирует каждую запись в строку вида "имя (категория): $сумма".
 func FormatNames(records []Record) []string {
 	names := make([]string, 0, len(records))
 	for _, r := range records {
@@ -62,7 +62,7 @@ func FormatNames(records []Record) []string {
 	return names
 }
 
-// Deduplicate removes records with a repeated ID, keeping the first occurrence.
+// Deduplicate удаляет записи с повторяющимся ID, сохраняя первое вхождение.
 func Deduplicate(records []Record) []Record {
 	seen := make(map[int]struct{}, len(records))
 	result := make([]Record, 0, len(records))
