@@ -20,7 +20,7 @@ cd "$REPO_ROOT"
 source scripts/lib.sh
 
 BASELINE="${BASELINE:-benchmarks/baseline.txt}"
-# Копия ВНЕ рабочего дерева: baseline.txt отслеживается git и в принципе
+# Копия вне рабочего дерева: baseline.txt отслеживается git и в принципе
 # может отличаться между ветками (даже если сейчас не отличается) — без
 # этого git checkout сценария молча подставлял бы ЕГО СОБСТВЕННЫЙ
 # baseline.txt вместо фиксированного эталона, снятого один раз на main.
@@ -40,7 +40,7 @@ command -v benchstat >/dev/null 2>&1 || {
 
 mkdir -p experiments
 FINAL_OUT="experiments/power_results.csv"
-# Пишем во временный файл ВНЕ рабочего дерева: FINAL_OUT отслеживается git,
+# Пишем во временный файл вне рабочего дерева: FINAL_OUT отслеживается git,
 # и запись в него между git checkout приводила бы к отказу checkout
 # ("local changes would be overwritten") на втором же сценарии.
 OUT="$(mktemp)"
